@@ -7,9 +7,9 @@
     "node": "24.22.0"
   },
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "node --env-file-if-exists=.env --import tsx --watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node --env-file-if-exists=.env dist/server.js",
     "test": "tsx --test src/health.test.ts",
     "typecheck": "tsc --noEmit"
   },

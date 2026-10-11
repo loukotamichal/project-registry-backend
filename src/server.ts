@@ -7,7 +7,8 @@ const db = openDatabase(config.databasePath);
 const app = buildApp(db);
 
 try {
-  await app.listen({ host: config.host, port: config.port });
+  const address = await app.listen({ host: config.host, port: config.port });
+  console.info(`API listening at ${address}`);
 } catch (error) {
   db.close();
   throw error;

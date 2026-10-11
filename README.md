@@ -22,6 +22,8 @@ npm install
 npm run dev
 ```
 
+Příkazy `dev` a `start` načtou případný soubor `.env`; proměnné prostředí mají přednost.
+
 API poslouchá na [http://127.0.0.1:3000](http://127.0.0.1:3000). Datový soubor vznikne v ignorované složce `data/`.
 
 ```bash
