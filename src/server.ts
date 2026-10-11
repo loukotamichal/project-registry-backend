@@ -1,0 +1,26 @@
+import { buildApp } from "./app.ts";
+import { loadConfig } from "./config.ts";
+import { openDatabase } from "./db.ts";
+
+const config = loadConfig();
+const db = openDatabase(config.databasePath);
+const app = buildApp(db);
+
+try {
+  await app.listen({ host: config.host, port: config.port });
+} catch (error) {
+  db.close();
+  throw error;
+}
+
+const shutdown = async () => {
+  await app.close();
+  db.close();
+};
+
+process.on("SIGINT", () => {
+  void shutdown();
+});
+process.on("SIGTERM", () => {
+  void shutdown();
+});
