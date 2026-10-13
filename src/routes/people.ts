@@ -1,3 +1,5 @@
+import { personProjects } from "../participants.ts";
+import { teamSelect } from "./shared.ts";
 import type { FastifyInstance } from "fastify";
 import type { AppDatabase } from "../db.ts";
 import { idParams, personSelect, positiveId, requiredText, requireEntity, text } from "./shared.ts";
@@ -21,7 +23,8 @@ export function peopleRoutes(app: FastifyInstance, db: AppDatabase): void {
   app.get<{ Params: { id: string } }>("/api/people/:id", { schema: { params: idParams } }, async request => {
     const id = Number(request.params.id);
     requireEntity(db, "people", id);
-    return db.prepare(`${personSelect} WHERE id=?`).get(id);
+    const person = db.prepare(`${personSelect} WHERE id=?`).get(id) as Person;
+    return { ...person, team: db.prepare(`${teamSelect} WHERE id=?`).get(person.teamId), projects: personProjects(db, id) };
   });
   app.patch<{ Params: { id: string }; Body: Partial<Input> }>("/api/people/:id", {
     schema: { params: idParams, body: { type: "object", additionalProperties: false, minProperties: 1, properties } },

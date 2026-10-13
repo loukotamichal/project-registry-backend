@@ -1,3 +1,4 @@
+import { assignmentRoutes } from "./routes/assignments.ts";
 import { ApiError } from "./routes/shared.ts";
 import { projectRoutes } from "./routes/projects.ts";
 import { peopleRoutes } from "./routes/people.ts";
@@ -38,6 +39,7 @@ export function buildApp(db: AppDatabase): FastifyInstance {
   projectRoutes(app, db);
   peopleRoutes(app, db);
   teamRoutes(app, db);
+  assignmentRoutes(app, db);
 
   app.get("/api/health", async (_request, reply) => {
     try {
