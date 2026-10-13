@@ -4,9 +4,9 @@ Serverová část aplikace pro evidenci projektů, osob a týmů. Poskytuje REST
 pro webové rozhraní a zajišťuje přístup k relační databázi SQLite.
 Backend je samostatná aplikace s vlastním sestavením a provozní konfigurací.
 
-Současná verze obsahuje spuštění serveru, správu databázového spojení a kontrolu
-stavu služby. Datový model evidence a příslušné CRUD operace zatím nejsou
-implementovány.
+Aplikace poskytuje CRUD projektů, osob a týmů, přímé přiřazování osob a týmů
+k projektům a výpočet všech účastníků. Detail osoby zahrnuje i projekty získané
+přes její tým. Vstupy se validují na serveru a vztahy chrání omezení SQLite.
 
 ## Návrh aplikace
 
@@ -27,8 +27,11 @@ záznamy. Databázový soubor a potřebný adresář vznikají automaticky.
 - **HTTP aplikace** (`src/app.ts`) sestavuje Fastify a registruje endpointy.
 - **Spuštění a ukončení** (`src/server.ts`) propojuje konfiguraci, databázi
   a server. Při ukončení uzavírá server i databázové spojení.
-- **Testy** (`src/health.test.ts`) ověřují cizí klíče a odpovědi endpointu při
-  dostupné i nedostupné databázi. Používají oddělenou databázi v paměti.
+- **Datový model a seed** (`src/schema.ts`, `src/seed.ts`) připravují tabulky a syntetická data.
+- **REST endpointy** (`src/routes/`) řeší CRUD, validaci a přiřazení.
+- **Účastníci** (`src/participants.ts`) odvozují účast z přímých a týmových vazeb.
+- **Testy** (`src/*.test.ts`) ověřují CRUD, validaci, integritu a týmovou účast
+  v izolované databázi v paměti.
 - **Kontejnerový provoz** (`Dockerfile`, `compose.yaml`) zajišťuje Linux sestavení
   backendu a propojení s frontendem.
 
@@ -56,9 +59,125 @@ Pokud se databázový dotaz nepodaří, vrací HTTP **503**:
 {"status":"error","database":"error"}
 ```
 
-Endpoint je určen také pro Docker healthcheck. Nejde o kontrolu úplnosti
-budoucího datového modelu. Databázové schéma a dokumentace dalších endpointů
-budou doplněny s implementací evidence.
+Endpoint slouží také pro Docker healthcheck. Ověřuje dostupnost databázového spojení.
+
+### Projekty
+
+- `GET /api/projects`: seznam v objektu `items`.
+- `POST /api/projects`: vytvoření, HTTP 201 a `Location`.
+- `GET /api/projects/:id`: údaje, `directPeople`, přiřazené `teams` a `participants`.
+- `PATCH /api/projects/:id`: úprava vybraných polí, HTTP 200.
+- `DELETE /api/projects/:id`: smazání projektu a jeho vazeb, HTTP 204.
+
+Příklad těla vytvoření:
+
+```json
+{"name":"Projekt Vega","description":"Syntetický projekt","status":"planned","startDate":"2026-11-01","endDate":null}
+```
+
+PATCH přijímá část stejných polí, například `{"status":"in_progress"}`.
+Stavy jsou `planned`, `in_progress`, `completed`. Datum musí existovat v kalendáři;
+konec nesmí předcházet začátku. Při PATCH se kontroluje výsledný záznam včetně
+již uložených hodnot. Datum ukončení je volitelné i při stavu `completed`.
+
+### Osoby
+
+- `GET /api/people`: seznam v `items`.
+- `POST /api/people`: vytvoření, HTTP 201 a `Location`.
+- `GET /api/people/:id`: osoba, její `team` a efektivní `projects`.
+- `PATCH /api/people/:id`: úprava, včetně převodu do jiného týmu, HTTP 200.
+- `DELETE /api/people/:id`: smazání osoby a přímých vazeb, HTTP 204.
+
+Příklad těla vytvoření:
+
+```json
+{"name":"Osoba 004","email":"osoba004@example.com","jobTitle":"Vývojář","teamId":1}
+```
+
+PATCH přijímá část těchto polí, například `{"teamId":2}`. Každá osoba musí mít
+existující tým. E-mail musí mít platný formát, ukládá se malými písmeny a je unikátní.
+
+### Týmy
+
+- `GET /api/teams`: seznam v `items`.
+- `POST /api/teams`: vytvoření, HTTP 201 a `Location`.
+- `GET /api/teams/:id`: tým, `members` a přiřazené `projects`.
+- `PATCH /api/teams/:id`: úprava, HTTP 200.
+- `DELETE /api/teams/:id`: smazání prázdného týmu a jeho projektových vazeb, HTTP 204.
+
+Příklad těla vytvoření:
+
+```json
+{"name":"Tým Gama","description":"Syntetický tým"}
+```
+
+PATCH přijímá část těchto polí, například `{"description":"Upravený popis"}`.
+Název týmu je unikátní bez rozlišení velikosti písmen. Obsazený tým nelze smazat.
+
+### Přiřazení osob a týmů
+
+- `PUT /api/projects/:projectId/people/:personId`: přímé přiřazení osoby.
+- `DELETE /api/projects/:projectId/people/:personId`: odebrání přímé vazby.
+- `PUT /api/projects/:projectId/teams/:teamId`: přiřazení týmu.
+- `DELETE /api/projects/:projectId/teams/:teamId`: odebrání týmové vazby.
+
+Tyto operace nemají tělo a vracejí HTTP 204. Opakovaný PUT nebo DELETE existujícího
+projektu a osoby/týmu má stejný výsledný stav; chybějící vazba není chyba,
+neexistující entita vrací 404. Příklad pro syntetický projekt a tým s ID 1:
+
+```bash
+curl -X PUT http://localhost:3000/api/projects/1/teams/1
+curl http://localhost:3000/api/projects/1
+```
+
+Účastníci jsou sjednocení přímých osob a aktuálních členů přiřazených týmů.
+Každá osoba je v `participants` jednou podle ID. Příznaky `direct` a `viaTeam`
+rozlišují zdroje účasti. Obdobné příznaky má seznam projektů v detailu osoby.
+Odebrání přímé vazby zachová účast přes tým. Změna týmu okamžitě změní nepřímé
+účasti; přímá přiřazení zachová. Historie členství se neuchovává.
+
+### Chybové odpovědi
+
+HTTP 400 znamená neplatný vstup (včetně prázdného PATCH a neznámých polí),
+404 neexistující entitu či endpoint, 409 duplicitní hodnotu nebo obsazený tým.
+Neočekávaná chyba vrací 500 bez interních SQL informací. Odpovědi 204 nemají tělo.
+
+```json
+{"error":{"code":"VALIDATION_ERROR","message":"Datum ukončení nesmí předcházet zahájení."}}
+```
+
+## Datový model
+
+Pět tabulek: `projects`, `people`, `teams`, `project_people`, `project_teams`.
+ID jsou celá čísla. Data projektu obsahují název, popis, stav a datumy;
+osoba jméno, e-mail, pozici a tým; tým název a volitelný popis.
+Datumy jsou texty `YYYY-MM-DD`, bez převodů časového pásma.
+Spojovací tabulky mají složené primární klíče a neumožní duplicitní přiřazení.
+
+```mermaid
+erDiagram
+    TEAMS ||--o{ PEOPLE : contains
+    PROJECTS ||--o{ PROJECT_PEOPLE : has
+    PEOPLE ||--o{ PROJECT_PEOPLE : assigned
+    PROJECTS ||--o{ PROJECT_TEAMS : has
+    TEAMS ||--o{ PROJECT_TEAMS : assigned
+```
+
+`people.team_id` je povinný FK s `ON DELETE RESTRICT`. FK ve spojovacích tabulkách
+mají `ON DELETE CASCADE`; smazání projektu nikdy nesmaže osoby ani týmy.
+Unikátnost e-mailu a názvu týmu chrání i DB. SQL hodnoty jsou parametrizované.
+
+Při startu se schéma vytvoří, pokud ještě neexistuje. `CREATE TABLE IF NOT EXISTS`
+není migrace existující struktury: případné budoucí změny schématu vyžadují
+samostatnou migraci. Seed se standardně zapíná a plní pouze původně prázdnou DB;
+`DEMO_SEED=false` jej vypne. V této verzi je `PRAGMA user_version=1` rezervované
+jako trvalá značka provedení/přeskočení seedu, nikoli čítač migrací. Značka a data
+vznikají v jedné transakci, restart nevrací smazané záznamy ani nepřepisuje změny.
+
+Ukázková data obsahují pouze smyšlené osoby `Osoba 001` až `003` s adresami
+na `example.com`, týmy Alfa/Beta a Projekt Orion. Orion má přiřazený tým Alfa
+a přímo osoby 002/003; výsledkem jsou tři účastníci, osoba 002 má oba zdroje.
+Aplikace nemá přihlášení a je určena pro lokální demo se syntetickými údaji.
 
 ## Konfigurace a uložení dat
 
