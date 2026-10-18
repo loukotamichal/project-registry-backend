@@ -189,7 +189,9 @@ mají přednost. Databáze standardně vzniká v ignorované složce `data/`.
 Docker Compose provozuje dvě služby: backend a Nginx s frontendem. Navenek je
 na portu 8080 dostupný pouze frontend, který předává API požadavky backendu.
 SQLite soubor `/app/data/app.sqlite` se ukládá do pojmenovaného volume
-`registry-data`, takže přežije nahrazení kontejneru. Lokální databáze a databáze
+`project-registry-data`, takže přežije nahrazení kontejneru.
+Název celého Compose projektu je výslovně nastavený na `project-registry`,
+nezávisle na názvu složky backendu. Lokální databáze a databáze
 v Dockeru jsou oddělené. Zastavení přes `docker compose down` volume zachová;
 přidání přepínače `-v` jej včetně dat odstraní.
 

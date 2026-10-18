@@ -1,3 +1,5 @@
+name: project-registry
+
 services:
   backend:
     build: .
@@ -24,3 +26,4 @@ services:
 
 volumes:
   registry-data:
+    name: project-registry-data
