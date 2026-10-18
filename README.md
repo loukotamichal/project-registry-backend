@@ -214,9 +214,14 @@ naklonované vedle sebe jako `project-registry-backend` a `project-registry-fron
 V backendové složce se celek sestaví a spustí příkazem:
 
 ```bash
-docker compose up --build -d --wait
+docker compose up
 ```
 
 Rozhraní aplikace je potom dostupné na
 [http://localhost:8080](http://localhost:8080), kontrola služby na
 [http://localhost:8080/api/health](http://localhost:8080/api/health).
+
+Při každém `docker compose up` se obě služby sestaví z aktuálních zdrojů
+(`pull_policy: build`); nezměněné vrstvy se použijí z cache. Příkaz zůstává
+spuštěný v terminálu a zobrazuje logy. `Ctrl+C` služby zastaví a zachová data.
+Po změně kódu aplikaci zastavte a spusťte stejným příkazem znovu.
